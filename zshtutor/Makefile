@@ -1,7 +1,8 @@
+
 CC      = gcc
 CFLAGS  = -O2 -Wall -Wextra
-TARGET  = nvimtutor
-SRC     = nvimtutor.c
+TARGET  = zshtutor
+SRC     = zshtutor.c
 PREFIX  = /usr/local
 
 all: $(TARGET)

@@ -318,7 +318,7 @@ static const char *sec_plugins[] = {
 };
 
 static const char *sec_telescope[] = {
-    "T:TELESCOPE + LSP + ПРОЧЕЕ",
+    "T:TELESCOPE / FUGITIVE / MASON / NOICE",
     "G:Telescope",
     "R:<leader>ff|find_files",
     "R:<leader>fg|live_grep (поиск по содержимому)",
@@ -326,18 +326,8 @@ static const char *sec_telescope[] = {
     "R:<leader>fh|help_tags",
     "R:<leader>fr|oldfiles (недавние файлы)",
     "R:<leader>fs|lsp_document_symbols",
+    "R:<leader>fd|diagnostics по всему проекту (telescope)",
     "N:Внутри: Ctrl+j/k навигация, Enter открыть, Ctrl+v вертикальный сплит",
-    "B:",
-    "G:LSP (Neovim 0.10+)",
-    "R:gd|перейти к определению",
-    "R:gD|перейти к объявлению",
-    "R:gr|все ссылки на символ",
-    "R:gi|перейти к реализации",
-    "R:K|документация (hover)",
-    "R:Ctrl+k|signature help (аргументы)",
-    "R:grn|переименовать символ",
-    "R:gra|code actions",
-    "R:[d  ]d|предыдущая / следующая диагностика",
     "B:",
     "G:vim-fugitive — Git",
     "R::G|статус (git status)",
@@ -352,11 +342,11 @@ static const char *sec_telescope[] = {
     "R::Mason|открыть UI менеджера",
     "R::MasonInstall|установить пакет вручную",
     "R::MasonUpdate|обновить всё",
-    "N:Установлены: lua_ls, pyright, ts_ls, prettier, stylua, black",
+    "N:Установлены: lua_ls, pyright, ts_ls, prettier, stylua, black, eslint_d, ruff",
     "B:",
     "G:conform.nvim — форматирование",
     "N:Форматирование при сохранении — автоматически",
-    "N:prettier: js/ts/json/html/css  |  stylua: lua  |  black: python",
+    "N:prettier: js/ts/jsx/tsx/json/html/css  |  stylua: lua  |  black: python",
     "B:",
     "G:noice.nvim",
     "R::Noice|история всех сообщений",
@@ -370,11 +360,76 @@ static const char *sec_telescope[] = {
     NULL
 };
 
+/* ── НОВЫЙ РАЗДЕЛ: IDE-функции ──────────────────────────────────────── */
+static const char *sec_ide[] = {
+    "T:IDE-ФУНКЦИИ (LSP / ДИАГНОСТИКА / АВТОДОПОЛНЕНИЕ)",
+    "G:LSP — навигация по коду",
+    "R:gd|перейти к определению",
+    "R:gD|перейти к объявлению",
+    "R:gi|перейти к реализации",
+    "R:gr|все ссылки на символ",
+    "R:K|документация (hover)",
+    "N:Keymaps активны только в буферах с подключённым LSP-сервером",
+    "B:",
+    "G:LSP — рефакторинг и действия",
+    "R:<leader>rn|переименовать символ (rename)",
+    "R:<leader>ca|code actions (авто-импорт, fix, рефакторинг)",
+    "N:code actions зависят от сервера: ts_ls предлагает импорты, extract function и т.д.",
+    "B:",
+    "G:Диагностика — текущий файл",
+    "R:<leader>e|показать ошибку под курсором (float)",
+    "R:[d|предыдущая диагностика",
+    "R:]d|следующая диагностика",
+    "N:Ошибки отображаются inline (virtual text) и в gutter (иконки)",
+    "N:Иконки:  = error,  = warn,  = info,  = hint",
+    "B:",
+    "G:trouble.nvim — диагностика по всему проекту",
+    "R:<leader>xx|все ошибки проекта (все файлы)",
+    "R:<leader>xb|ошибки только текущего буфера",
+    "R:<leader>xs|символы файла (структура)",
+    "R:<leader>xr|все ссылки на символ под курсором",
+    "N:Внутри trouble: j/k навигация, Enter — перейти к месту ошибки",
+    "N:Обновляется автоматически при изменении файлов",
+    "B:",
+    "G:nvim-cmp — автодополнение",
+    "R:Ctrl+Space|принудительно открыть меню",
+    "R:Tab|выбрать следующий вариант / развернуть сниппет",
+    "R:Shift+Tab|выбрать предыдущий вариант",
+    "R:Enter|подтвердить выбор",
+    "R:Ctrl+e|закрыть меню",
+    "R:Ctrl+u / Ctrl+d|прокрутить документацию в popup",
+    "N:Источники: LSP (приоритет) → сниппеты → пути → буфер",
+    "N:friendly-snippets подключены автоматически через LuaSnip",
+    "B:",
+    "G:nvim-lint — линтинг (независимо от LSP)",
+    "N:Запускается автоматически: при сохранении, открытии, выходе из INSERT",
+    "N:eslint_d: js / ts / jsx / tsx  |  ruff: python",
+    "N:Результаты попадают в общую диагностику — видны в trouble и gutter",
+    "N:eslint_d — демон, запускается один раз и остаётся в памяти (быстро)",
+    "B:",
+    "G:LSP-серверы (mason)",
+    "R:ts_ls|TypeScript / JavaScript (Microsoft)",
+    "R:pyright|Python (Microsoft)",
+    "R:lua_ls|Lua (сфокусирован на Neovim API)",
+    "N:Все серверы устанавливаются автоматически при первом запуске",
+    "N:capabilities переданы cmp_nvim_lsp — LSP отдаёт полные данные для дополнения",
+    "B:",
+    "G:Типичный рабочий цикл",
+    "N:1. Открыть файл — LSP подключается автоматически",
+    "N:2. Ошибки сразу видны в gutter и inline",
+    "N:3. <leader>xx — обзор всех проблем проекта",
+    "N:4. gd / gr / K — навигация и документация",
+    "N:5. <leader>ca — исправить / импортировать",
+    "N:6. <leader>rn — переименовать символ везде",
+    "N:7. :w — форматирование + линтинг автоматически",
+    NULL
+};
+
 /* ══════════════════════════════════════════════════════════════════════
    FLAT LINE BUFFER
    ══════════════════════════════════════════════════════════════════════ */
 
-#define FLAT_MAX 700
+#define FLAT_MAX 800
 #define FLAT_LEN 320
 
 typedef struct {
@@ -511,7 +566,7 @@ static void view_section(const char **sec) {
    MENU
    ══════════════════════════════════════════════════════════════════════ */
 
-#define MENU_N 8
+#define MENU_N 9
 
 static const char *menu_labels[MENU_N] = {
     "Навигация",
@@ -521,7 +576,8 @@ static const char *menu_labels[MENU_N] = {
     "Файлы, буферы, окна",
     "Работа с папкой / проектом  (oil / grug-far / telescope)",
     "Плагины  (leap / surround / commentary / targets)",
-    "Telescope / LSP / Fugitive / Mason / Noice",
+    "IDE-функции  (LSP / диагностика / автодополнение / линтинг)",
+    "Telescope / Fugitive / Mason / Noice",
 };
 
 static const char **menu_sections[MENU_N] = {
@@ -532,6 +588,7 @@ static const char **menu_sections[MENU_N] = {
     sec_files,
     sec_dirwork,
     sec_plugins,
+    sec_ide,
     sec_telescope,
 };
 
