@@ -1,0 +1,16 @@
+[
+  {
+    "file": "nvimtutor.c",
+    "arguments": [
+      "gcc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-o",
+      "/home/raf/.local/bin/nvimtutor",
+      "nvimtutor.c"
+    ],
+    "directory": "/home/raf/git/users/rozeraf/dotfiles/nvimtutor",
+    "output": "/home/raf/.local/bin/nvimtutor"
+  }
+]
