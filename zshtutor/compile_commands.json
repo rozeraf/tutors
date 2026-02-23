@@ -1,0 +1,16 @@
+[
+  {
+    "file": "zshtutor.c",
+    "arguments": [
+      "gcc",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-o",
+      "/home/raf/.local/bin/zshtutor",
+      "zshtutor.c"
+    ],
+    "directory": "/home/raf/git/users/rozeraf/dotfiles/zshtutor",
+    "output": "/home/raf/.local/bin/zshtutor"
+  }
+]
