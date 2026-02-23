@@ -1,61 +1,69 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
 
 /* ── ANSI ───────────────────────────────────────────────────────────── */
-#define RESET    "\033[0m"
-#define BOLD     "\033[1m"
-#define DIM      "\033[2m"
+#define RESET "\033[0m"
+#define BOLD "\033[1m"
+#define DIM "\033[2m"
 #define CUR_HIDE "\033[?25l"
 #define CUR_SHOW "\033[?25h"
-#define CLR      "\033[2J\033[H"
+#define CLR "\033[2J\033[H"
+#define ALT_ON "\033[?1049h"  /* переключиться в альтернативный буфер */
+#define ALT_OFF "\033[?1049l" /* вернуться в основной буфер           */
 
-#define C_TITLE  "\033[38;5;111m"
-#define C_KEY    "\033[38;5;183m"
-#define C_DESC   "\033[38;5;252m"
-#define C_HEAD   "\033[38;5;150m"
-#define C_SEP    "\033[38;5;240m"
-#define C_HINT   "\033[38;5;109m"
-#define C_CUR    "\033[48;5;237m\033[38;5;255m"
+#define C_TITLE "\033[38;5;111m"
+#define C_KEY "\033[38;5;183m"
+#define C_DESC "\033[38;5;252m"
+#define C_HEAD "\033[38;5;150m"
+#define C_SEP "\033[38;5;240m"
+#define C_HINT "\033[38;5;109m"
+#define C_CUR "\033[48;5;237m\033[38;5;255m"
 
 /* ── raw terminal ───────────────────────────────────────────────────── */
 static struct termios orig_term;
 
 static void term_raw(void) {
-    struct termios t;
-    tcgetattr(STDIN_FILENO, &orig_term);
-    t = orig_term;
-    t.c_lflag &= ~(ICANON | ECHO);
-    t.c_cc[VMIN]  = 1;
-    t.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSANOW, &t);
+  struct termios t;
+  tcgetattr(STDIN_FILENO, &orig_term);
+  t = orig_term;
+  t.c_lflag &= ~(ICANON | ECHO);
+  t.c_cc[VMIN] = 1;
+  t.c_cc[VTIME] = 0;
+  tcsetattr(STDIN_FILENO, TCSANOW, &t);
+  printf(ALT_ON); /* войти в альтернативный буфер */
+  fflush(stdout);
 }
 
 static void term_restore(void) {
-    tcsetattr(STDIN_FILENO, TCSANOW, &orig_term);
-    printf(CUR_SHOW);
+  tcsetattr(STDIN_FILENO, TCSANOW, &orig_term);
+  printf(CUR_SHOW ALT_OFF); /* показать курсор + вернуть основной буфер */
+  fflush(stdout);
 }
 
 static int read_key(void) {
-    unsigned char c;
-    if (read(STDIN_FILENO, &c, 1) != 1) return -1;
-    if (c == 27) {
-        unsigned char seq[2];
-        if (read(STDIN_FILENO, &seq[0], 1) != 1) return 27;
-        if (read(STDIN_FILENO, &seq[1], 1) != 1) return 27;
-        return 0;
-    }
-    return (int)c;
+  unsigned char c;
+  if (read(STDIN_FILENO, &c, 1) != 1)
+    return -1;
+  if (c == 27) {
+    unsigned char seq[2];
+    if (read(STDIN_FILENO, &seq[0], 1) != 1)
+      return 27;
+    if (read(STDIN_FILENO, &seq[1], 1) != 1)
+      return 27;
+    return 0;
+  }
+  return (int)c;
 }
 
 static int term_rows(void) {
-    struct winsize w;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 4)
-        return (int)w.ws_row;
-    return 24;
+  struct winsize w;
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 4)
+    return (int)w.ws_row;
+  return 24;
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -98,49 +106,46 @@ static const char *sec_navigation[] = {
     "R:{ }|прыжок между параграфами",
     "R:%|прыжок к парной скобке",
     "N:Цифра перед движением повторяет его: 5j, 3w, 10l",
-    NULL
-};
+    NULL};
 
-static const char *sec_editing[] = {
-    "T:РЕДАКТИРОВАНИЕ",
-    "G:Режимы вставки",
-    "R:i|INSERT перед курсором",
-    "R:a|INSERT после курсора",
-    "R:I|INSERT в начало строки",
-    "R:A|INSERT в конец строки",
-    "R:o|новая строка ниже + INSERT",
-    "R:O|новая строка выше + INSERT",
-    "R:Esc|вернуться в NORMAL",
-    "G:Операции со строками",
-    "R:dd|вырезать строку",
-    "R:yy|скопировать строку",
-    "R:p|вставить после курсора",
-    "R:P|вставить перед курсором",
-    "R:cc|заменить строку (вырезать + INSERT)",
-    "R:C|удалить до конца строки + INSERT",
-    "R:D|удалить до конца строки",
-    "R:J|склеить со следующей строкой",
-    "G:Символы",
-    "R:x|удалить символ под курсором",
-    "R:r<x>|заменить символ на x",
-    "R:~|переключить регистр символа",
-    "G:Отмена / повтор",
-    "R:u|отменить",
-    "R:Ctrl+r|повторить отменённое",
-    "R:.|повторить последнее изменение",
-    "G:Операторы (оператор + движение)",
-    "R:d<motion>|удалить:   dw, d$, d3j, d%",
-    "R:y<motion>|скопировать: yw, y$, yG",
-    "R:c<motion>|заменить:  cw, c$, ciw",
-    "R:=<motion>|авто-отступ: gg=G (весь файл)",
-    "G:Визуальный режим",
-    "R:v|VISUAL посимвольный",
-    "R:V|VISUAL LINE",
-    "R:Ctrl+v|VISUAL BLOCK",
-    "R:o|переключить конец выделения",
-    "R:> <|сдвинуть выделение вправо / влево",
-    NULL
-};
+static const char *sec_editing[] = {"T:РЕДАКТИРОВАНИЕ",
+                                    "G:Режимы вставки",
+                                    "R:i|INSERT перед курсором",
+                                    "R:a|INSERT после курсора",
+                                    "R:I|INSERT в начало строки",
+                                    "R:A|INSERT в конец строки",
+                                    "R:o|новая строка ниже + INSERT",
+                                    "R:O|новая строка выше + INSERT",
+                                    "R:Esc|вернуться в NORMAL",
+                                    "G:Операции со строками",
+                                    "R:dd|вырезать строку",
+                                    "R:yy|скопировать строку",
+                                    "R:p|вставить после курсора",
+                                    "R:P|вставить перед курсором",
+                                    "R:cc|заменить строку (вырезать + INSERT)",
+                                    "R:C|удалить до конца строки + INSERT",
+                                    "R:D|удалить до конца строки",
+                                    "R:J|склеить со следующей строкой",
+                                    "G:Символы",
+                                    "R:x|удалить символ под курсором",
+                                    "R:r<x>|заменить символ на x",
+                                    "R:~|переключить регистр символа",
+                                    "G:Отмена / повтор",
+                                    "R:u|отменить",
+                                    "R:Ctrl+r|повторить отменённое",
+                                    "R:.|повторить последнее изменение",
+                                    "G:Операторы (оператор + движение)",
+                                    "R:d<motion>|удалить:   dw, d$, d3j, d%",
+                                    "R:y<motion>|скопировать: yw, y$, yG",
+                                    "R:c<motion>|заменить:  cw, c$, ciw",
+                                    "R:=<motion>|авто-отступ: gg=G (весь файл)",
+                                    "G:Визуальный режим",
+                                    "R:v|VISUAL посимвольный",
+                                    "R:V|VISUAL LINE",
+                                    "R:Ctrl+v|VISUAL BLOCK",
+                                    "R:o|переключить конец выделения",
+                                    "R:> <|сдвинуть выделение вправо / влево",
+                                    NULL};
 
 static const char *sec_textobj[] = {
     "T:ТЕКСТОВЫЕ ОБЪЕКТЫ",
@@ -162,8 +167,7 @@ static const char *sec_textobj[] = {
     "N:da(  — удалить скобки вместе с содержимым",
     "N:yi{  — скопировать содержимое фигурных скобок",
     "N:vap  — выделить параграф",
-    NULL
-};
+    NULL};
 
 static const char *sec_search[] = {
     "T:ПОИСК И ЗАМЕНА",
@@ -190,34 +194,31 @@ static const char *sec_search[] = {
     "R:$|конец строки",
     "R:\\w|буква или цифра",
     "R:[abc]|один из символов",
-    NULL
-};
+    NULL};
 
-static const char *sec_files[] = {
-    "T:ФАЙЛЫ, БУФЕРЫ, ОКНА",
-    "G:Сохранение и выход",
-    "R::w|сохранить",
-    "R::q|выйти",
-    "R::wq  /  ZZ|сохранить и выйти",
-    "R::q!|выйти без сохранения",
-    "R::wa|сохранить все буферы",
-    "R::qa!|выйти из всех без сохранения",
-    "G:Буферы",
-    "R::e <файл>|открыть файл",
-    "R::bn|следующий буфер",
-    "R::bp|предыдущий буфер",
-    "R::bd|закрыть буфер",
-    "R::ls|список буферов",
-    "R::b<n>|перейти к буферу n",
-    "G:Окна",
-    "R::sp|разделить горизонтально",
-    "R::vsp|разделить вертикально",
-    "R:Ctrl+w h/j/k/l|навигация между окнами",
-    "R:Ctrl+w q|закрыть окно",
-    "R:Ctrl+w =|выровнять размеры окон",
-    "R:Ctrl+w r|поменять окна местами",
-    NULL
-};
+static const char *sec_files[] = {"T:ФАЙЛЫ, БУФЕРЫ, ОКНА",
+                                  "G:Сохранение и выход",
+                                  "R::w|сохранить",
+                                  "R::q|выйти",
+                                  "R::wq  /  ZZ|сохранить и выйти",
+                                  "R::q!|выйти без сохранения",
+                                  "R::wa|сохранить все буферы",
+                                  "R::qa!|выйти из всех без сохранения",
+                                  "G:Буферы",
+                                  "R::e <файл>|открыть файл",
+                                  "R::bn|следующий буфер",
+                                  "R::bp|предыдущий буфер",
+                                  "R::bd|закрыть буфер",
+                                  "R::ls|список буферов",
+                                  "R::b<n>|перейти к буферу n",
+                                  "G:Окна",
+                                  "R::sp|разделить горизонтально",
+                                  "R::vsp|разделить вертикально",
+                                  "R:Ctrl+w h/j/k/l|навигация между окнами",
+                                  "R:Ctrl+w q|закрыть окно",
+                                  "R:Ctrl+w =|выровнять размеры окон",
+                                  "R:Ctrl+w r|поменять окна местами",
+                                  NULL};
 
 static const char *sec_dirwork[] = {
     "T:РАБОТА С ПАПКОЙ / ПРОЕКТОМ",
@@ -259,7 +260,6 @@ static const char *sec_dirwork[] = {
     "B:",
     "G:grug-far.nvim — поиск и замена по проекту",
     "R:<leader>sr|открыть grug-far (слово под курсором)",
-    "R:<leader>sR|открыть grug-far (пустой)",
     "R::GrugFar|открыть вручную",
     "N:Поддерживает ripgrep-флаги: --type lua, --glob '*.ts', -F (literal)",
     "N:Изменения показываются как diff; применяются по подтверждению",
@@ -278,8 +278,7 @@ static const char *sec_dirwork[] = {
     "R::bufdo %s/old/new/g|то же по всем открытым буферам",
     "R::bufdo w|сохранить все буферы",
     "N:cfdo / lfdo — то же по quickfix / loclist (удобно после live_grep)",
-    NULL
-};
+    NULL};
 
 static const char *sec_plugins[] = {
     "T:ПЛАГИНЫ",
@@ -287,7 +286,8 @@ static const char *sec_plugins[] = {
     "R:s|прыжок вперёд (введи 2 символа → метка)",
     "R:S|прыжок назад",
     "R:gs|прыжок в другое окно",
-    "N:Работает как оператор: ds<метка>, ys<метка>\" — удалить/обернуть до точки",
+    "N:Работает как оператор: ds<метка>, ys<метка>\" — удалить/обернуть до "
+    "точки",
     "B:",
     "G:vim-surround — обёртки",
     "R:cs\"'|заменить \" на '",
@@ -314,8 +314,7 @@ static const char *sec_plugins[] = {
     "R:I / A|точный inner / outer (без лишних пробелов)",
     "N:n = next, l = last — работает без нахождения внутри объекта",
     "N:Разделители: , . ; : + - = ~ _ * # / | \\ & $",
-    NULL
-};
+    NULL};
 
 static const char *sec_telescope[] = {
     "T:TELESCOPE / FUGITIVE / MASON / NOICE",
@@ -342,7 +341,8 @@ static const char *sec_telescope[] = {
     "R::Mason|открыть UI менеджера",
     "R::MasonInstall|установить пакет вручную",
     "R::MasonUpdate|обновить всё",
-    "N:Установлены: lua_ls, pyright, ts_ls, prettier, stylua, black, eslint_d, ruff",
+    "N:Установлены: lua_ls, pyright, ts_ls, prettier, stylua, black, eslint_d, "
+    "ruff",
     "B:",
     "G:conform.nvim — форматирование",
     "N:Форматирование при сохранении — автоматически",
@@ -357,8 +357,7 @@ static const char *sec_telescope[] = {
     "G:which-key.nvim",
     "N:Автоматически показывает подсказки после <leader> или любого префикса",
     "N:Настраивать не нужно — работает сам",
-    NULL
-};
+    NULL};
 
 static const char *sec_ide[] = {
     "T:IDE-ФУНКЦИИ (LSP / ДИАГНОСТИКА / АВТОДОПОЛНЕНИЕ)",
@@ -373,7 +372,8 @@ static const char *sec_ide[] = {
     "G:LSP — рефакторинг и действия",
     "R:<leader>rn|переименовать символ (rename)",
     "R:<leader>ca|code actions (авто-импорт, fix, рефакторинг)",
-    "N:code actions зависят от сервера: ts_ls предлагает импорты, extract function и т.д.",
+    "N:code actions зависят от сервера: ts_ls предлагает импорты, extract "
+    "function и т.д.",
     "B:",
     "G:Диагностика — текущий файл",
     "R:<leader>e|показать ошибку под курсором (float)",
@@ -397,7 +397,7 @@ static const char *sec_ide[] = {
     "R:Enter|подтвердить выбор",
     "R:Ctrl+e|закрыть меню",
     "R:Ctrl+u / Ctrl+d|прокрутить документацию в popup",
-    "N:Источники: LSP (приоритет) → сниппеты → пути → буфер",
+    "N:Источники: LSP (приоритет) → Codeium [AI] → сниппеты → пути → буфер",
     "N:friendly-snippets подключены автоматически через LuaSnip",
     "B:",
     "G:nvim-lint — линтинг (независимо от LSP)",
@@ -410,8 +410,11 @@ static const char *sec_ide[] = {
     "R:ts_ls|TypeScript / JavaScript (Microsoft)",
     "R:pyright|Python (Microsoft)",
     "R:lua_ls|Lua (сфокусирован на Neovim API)",
+    "R:emmet_language_server|HTML/CSS сокращения (Emmet)",
+    "R:marksman|Markdown (go-to, references)",
     "N:Все серверы устанавливаются автоматически при первом запуске",
-    "N:capabilities переданы cmp_nvim_lsp — LSP отдаёт полные данные для дополнения",
+    "N:capabilities переданы cmp_nvim_lsp — LSP отдаёт полные данные для "
+    "дополнения",
     "B:",
     "G:Типичный рабочий цикл",
     "N:1. Открыть файл — LSP подключается автоматически",
@@ -421,10 +424,8 @@ static const char *sec_ide[] = {
     "N:5. <leader>ca — исправить / импортировать",
     "N:6. <leader>rn — переименовать символ везде",
     "N:7. :w — форматирование + линтинг автоматически",
-    NULL
-};
+    NULL};
 
-/* ── РАЗДЕЛ: Управление Git ─────────────────────────────────────────── */
 static const char *sec_git[] = {
     "T:УПРАВЛЕНИЕ GIT (NEOGIT + DIFFVIEW)",
     "G:Открытие",
@@ -432,7 +433,8 @@ static const char *sec_git[] = {
     "R::Neogit|открыть вручную",
     "R::Neogit commit|сразу открыть буфер коммита",
     "R::Neogit log|открыть лог",
-    "N:В главном окне видны секции: Untracked, Unstaged, Staged, Recent commits",
+    "N:В главном окне видны секции: Untracked, Unstaged, Staged, Recent "
+    "commits",
     "B:",
     "G:Навигация по секциям и файлам",
     "R:Tab|раскрыть / свернуть секцию или файл (показать hunks)",
@@ -460,7 +462,8 @@ static const char *sec_git[] = {
     "R:cs|squash — коммит с флагом --squash",
     "N:В буфере коммита: :wq или ZZ — сохранить и выполнить коммит",
     "N::q! — отменить коммит",
-    "N:Первая строка — subject (до 72 символов), затем пустая строка, затем body",
+    "N:Первая строка — subject (до 72 символов), затем пустая строка, затем "
+    "body",
     "B:",
     "G:Push / Pull / Fetch",
     "R:Pp|push в upstream (origin/текущая ветка)",
@@ -487,7 +490,8 @@ static const char *sec_git[] = {
     "R:ra|abort — отменить текущий rebase",
     "R:rc|continue — продолжить после разрешения конфликтов",
     "R:rs|skip — пропустить проблемный коммит",
-    "N:В интерактивном rebase: p pick, r reword, e edit, s squash, f fixup, d drop",
+    "N:В интерактивном rebase: p pick, r reword, e edit, s squash, f fixup, d "
+    "drop",
     "N:Переставляй строки коммитов прямо в буфере — это обычный vim",
     "B:",
     "G:Stash",
@@ -508,7 +512,8 @@ static const char *sec_git[] = {
     "G:Разрешение конфликтов",
     "N:Конфликтующие файлы видны в секции Unmerged в статусе",
     "R:Enter|открыть файл с конфликтом в редакторе",
-    "N:Далее используй diffview.nvim — он специально создан для merge conflicts",
+    "N:Далее используй diffview.nvim — он специально создан для merge "
+    "conflicts",
     "N:После разрешения: s (stage файл) → cc (коммит)",
     "B:",
     "G:Интеграция с diffview",
@@ -570,7 +575,8 @@ static const char *sec_git[] = {
     "G:Разрешение конфликтов (merge conflicts)",
     "R::DiffviewOpen|в состоянии конфликта показывает три панели",
     "N:Три панели: OURS (слева) | RESULT (центр) | THEIRS (справа)",
-    "N:Редактируй RESULT напрямую — это обычный буфер, все vim операции работают",
+    "N:Редактируй RESULT напрямую — это обычный буфер, все vim операции "
+    "работают",
     "R:<leader>co|принять OURS для hunk под курсором",
     "R:<leader>ct|принять THEIRS для hunk под курсором",
     "R:<leader>cb|принять оба варианта (both)",
@@ -603,78 +609,234 @@ static const char *sec_git[] = {
     "N:4. <leader>co / ct для каждого hunk или вручную в RESULT",
     "N:5. [x / ]x — прыгать между конфликтами",
     "N:6. После разрешения: <leader>gq → <leader>gg → s → cc",
-    NULL
-};
+    NULL};
+
+/* ══════════════════════════════════════════════════════════════════════
+   НОВЫЕ РАЗДЕЛЫ
+   ══════════════════════════════════════════════════════════════════════ */
+
+static const char *sec_ui[] = {
+    "T:UI-ПЛАГИНЫ (BUFFERLINE / DASHBOARD / WINBAR / ОТСТУПЫ)",
+    "G:bufferline.nvim — вкладки файлов",
+    "N:Вкладки отображаются вверху, как в VSCode. Иконки LSP-диагностики на "
+    "вкладке.",
+    "R:<S-l>|перейти к следующему буферу",
+    "R:<S-h>|перейти к предыдущему буферу",
+    "R:<leader>1..9|прыжок к буферу по номеру",
+    "R:<leader>bd|закрыть текущий буфер",
+    "R:<leader>bp|закрепить (pin) буфер — не закрывается при bd",
+    "N:Закреплённый буфер отображается иначе и остаётся при закрытии остальных",
+    "N:separator_style = slant — скошенные вкладки; можно сменить на "
+    "thin/slope",
+    "B:",
+    "G:dashboard-nvim — стартовый экран",
+    "N:Открывается автоматически при запуске nvim без аргументов.",
+    "R:f|Find File — Telescope find_files",
+    "R:r|Recent — Telescope oldfiles",
+    "R:g|Grep — Telescope live_grep",
+    "R:c|Config — открыть init.lua",
+    "R:q|Quit — выйти из nvim",
+    "N:Для выхода в dashboard из любого буфера: :bd или закрой все буферы",
+    "B:",
+    "G:render-markdown.nvim — рендер Markdown в буфере",
+    "N:Активен автоматически для файлов *.md — ничего запускать не нужно.",
+    "N:Заголовки (#, ##, ###) отображаются крупнее и с цветом",
+    "N:Кодблоки ``` получают рамку и фоновый цвет (style = full)",
+    "N:Списки — иконки вместо дефисов",
+    "N:Чекбоксы [ ] и [x] рендерятся как иконки □ / ☑",
+    "N:Таблицы выравниваются автоматически",
+    "R::RenderMarkdown enable|включить рендер вручную",
+    "R::RenderMarkdown disable|отключить рендер (вернуть plain text)",
+    "R::RenderMarkdown toggle|переключить",
+    "N:marksman LSP: gd/gr/K работают в markdown — go-to заголовку, references",
+    "B:",
+    "G:barbecue.nvim + nvim-navic — winbar (хлебные крошки)",
+    "N:Строка сверху каждого окна показывает путь к символу под курсором.",
+    "N:Пример: Component > handleClick > useState",
+    "N:Обновляется при движении курсора через LSP — требует подключённого "
+    "сервера",
+    "N:Отключён для neo-tree, toggleterm, dashboard — не мешает",
+    "N:Иконки соответствуют типу символа: функция, класс, переменная и т.д.",
+    "B:",
+    "G:indent-blankline.nvim — вертикальные линии отступов",
+    "N:Все линии отступов — приглушённый серый цвет (#313244)",
+    "N:Линия ТЕКУЩЕГО блока (ближайшего к курсору) — синяя (#89b4fa)",
+    "N:Горизонтальные черты в начале и конце активного блока — его границы",
+    "N:Блок определяется через treesitter: функция, if, for, class, объект и "
+    "т.д.",
+    "N:При движении курсора синяя линия переключается на ближайший "
+    "родительский блок",
+    "N:Отключён для: dashboard, neo-tree, toggleterm, help, lazy, mason",
+    NULL};
+
+static const char *sec_tools[] = {
+    "T:ТЕРМИНАЛ И АВТОДОПОЛНЕНИЕ (TOGGLETERM / CODEIUM / AUTOPAIRS / EMMET)",
+    "G:toggleterm.nvim — встроенный терминал",
+    "N:Терминал открывается прямо в nvim, не нужно переключать вкладки "
+    "терминала.",
+    "R:Ctrl+`|открыть / закрыть горизонтальный терминал (как в VSCode)",
+    "R:<leader>tf|открыть float-терминал (плавающее окно)",
+    "R:<leader>th|открыть горизонтальный терминал",
+    "R:<leader>tv|открыть вертикальный терминал (ширина 60)",
+    "N:Повторное нажатие того же сочетания скрывает / показывает терминал",
+    "N:persist_mode = true — режим терминала сохраняется между открытиями",
+    "B:",
+    "G:Навигация в терминале",
+    "N:По умолчанию в терминале — terminal mode (INSERT-подобный для shell)",
+    "R:Esc|выйти из terminal mode в NORMAL (можно копировать текст)",
+    "R:Ctrl+h / l / j / k|переключиться в соседнее окно не выходя из терминала",
+    "N:В NORMAL mode внутри терминала работают все vim движения и копирование",
+    "N:Для возврата в shell нажми i или a",
+    "B:",
+    "G:Несколько терминалов",
+    "N:Каждый toggleterm — отдельный буфер с номером.",
+    "R::ToggleTerm 1|открыть/показать терминал №1",
+    "R::ToggleTerm 2|открыть/показать терминал №2",
+    "N:Все открытые терминалы независимы — разные shell-сессии",
+    "B:",
+    "G:Codeium — AI автодополнение",
+    "N:Бесплатный AI inline ghost-text. При первом запуске: :Codeium Auth",
+    "N:Предложения появляются как серый ghost-text справа от курсора",
+    "N:Работает параллельно с nvim-cmp — не конфликтует",
+    "R:Ctrl+l|принять предложение целиком",
+    "R:Ctrl+j|принять предложение по одному слову",
+    "R:Ctrl+]|отклонить предложение",
+    "N:В меню cmp Codeium виден как источник [AI]",
+    "R::Codeium Auth|авторизация (один раз)",
+    "R::Codeium Enable|включить для текущего буфера",
+    "R::Codeium Disable|отключить для текущего буфера",
+    "R::Codeium Toggle|переключить",
+    "B:",
+    "G:nvim-autopairs — умное автозакрытие скобок",
+    "N:Заменяет ручные биндинги (, [, {, \", ' — теперь через "
+    "treesitter-контекст.",
+    "N:Внутри строки кавычки не дублируются — autopairs это понимает",
+    "N:В конце слова ) не добавляется лишняя скобка",
+    "N:После Enter внутри {} — автоматический отступ и позиция курсора",
+    "N:Интеграция с cmp: при confirm функции скобка добавляется автоматически",
+    "N:Для принудительного ввода без пары — нажми символ дважды быстро",
+    "B:",
+    "G:Emmet (emmet-language-server) — HTML/CSS сокращения",
+    "N:Работает через LSP как источник автодополнения. Активен в "
+    "html/css/jsx/tsx.",
+    "N:Введи сокращение → Tab (через cmp) или Enter — развернётся в полный код",
+    "B:",
+    "N:Основные сокращения:",
+    "R:!|полный HTML5 шаблон (<!DOCTYPE html>...)",
+    "R:div|<div></div>",
+    "R:div.class|<div class=\"class\"></div>",
+    "R:div#id|<div id=\"id\"></div>",
+    "R:ul>li*3|<ul> с тремя <li>",
+    "R:div>p+span|div содержащий p и span",
+    "R:div.wrap>ul>li.item*5|вложенная структура",
+    "R:a[href=#]|<a href=\"#\"></a>",
+    "R:input:text|<input type=\"text\">",
+    "R:input:email|<input type=\"email\">",
+    "R:input:checkbox|<input type=\"checkbox\">",
+    "R:btn или button|<button></button>",
+    "R:img[src=][alt=]|<img src=\"\" alt=\"\">",
+    "R:link:css|<link rel=\"stylesheet\" href=\"style.css\">",
+    "R:script:src|<script src=\"\"></script>",
+    "B:",
+    "N:CSS сокращения (в .css / style атрибутах):",
+    "R:m10|margin: 10px",
+    "R:p10-20|padding: 10px 20px",
+    "R:df|display: flex",
+    "R:fz16|font-size: 16px",
+    "R:bg#fff|background: #fff",
+    "R:w100p|width: 100%",
+    "R:h100vh|height: 100vh",
+    "R:pos-r|position: relative",
+    "R:pos-a|position: absolute",
+    "R:jc-c|justify-content: center",
+    "R:ai-c|align-items: center",
+    "B:",
+    "N:Множители и нумерация:",
+    "R:li*5|5 элементов li",
+    "R:li.item$*3|li.item1, li.item2, li.item3 ($ = номер)",
+    "R:li{текст $}*3|li с содержимым 'текст 1', 'текст 2', 'текст 3'",
+    "B:",
+    "N:В JSX: работают те же сокращения, className вместо class генерируется "
+    "автоматически",
+    NULL};
 
 /* ══════════════════════════════════════════════════════════════════════
    FLAT LINE BUFFER
    ══════════════════════════════════════════════════════════════════════ */
 
-#define FLAT_MAX 900
+#define FLAT_MAX 1200
 #define FLAT_LEN 320
 
 typedef struct {
-    char text[FLAT_LEN];
+  char text[FLAT_LEN];
 } FlatLine;
 
 static FlatLine flat[FLAT_MAX];
-static int      flat_total = 0;
+static int flat_total = 0;
 
 static void flat_add(const char *s) {
-    if (flat_total >= FLAT_MAX) return;
-    snprintf(flat[flat_total].text, FLAT_LEN, "%s", s);
-    flat_total++;
+  if (flat_total >= FLAT_MAX)
+    return;
+  snprintf(flat[flat_total].text, FLAT_LEN, "%s", s);
+  flat_total++;
 }
 
 static void flat_build(const char **sec) {
-    flat_total = 0;
-    char buf[FLAT_LEN];
-    for (int i = 0; sec[i]; i++) {
-        const char *line    = sec[i];
-        char        type    = line[0];
-        const char *content = line + 2;
-        switch (type) {
-            case 'T':
-                flat_add(C_SEP "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
-                snprintf(buf, FLAT_LEN, C_TITLE BOLD "  %s" RESET, content);
-                flat_add(buf);
-                flat_add(C_SEP "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
-                break;
-            case 'G':
-                flat_add("");
-                snprintf(buf, FLAT_LEN, C_HEAD BOLD "  ## %s" RESET, content);
-                flat_add(buf);
-                break;
-            case 'R': {
-                char key[64], desc[256];
-                const char *pipe = strchr(content, '|');
-                if (pipe) {
-                    int klen = (int)(pipe - content);
-                    if (klen >= (int)sizeof(key)) klen = (int)sizeof(key) - 1;
-                    strncpy(key, content, klen); key[klen] = '\0';
-                    strncpy(desc, pipe + 1, sizeof(desc) - 1);
-                    desc[sizeof(desc) - 1] = '\0';
-                } else {
-                    strncpy(key, content, sizeof(key) - 1);
-                    key[sizeof(key) - 1] = '\0'; desc[0] = '\0';
-                }
-                snprintf(buf, FLAT_LEN,
-                    "  " C_KEY BOLD "%-18s" RESET C_DESC "  %s" RESET, key, desc);
-                flat_add(buf);
-                break;
-            }
-            case 'N':
-                snprintf(buf, FLAT_LEN, C_HINT DIM "  > %s" RESET, content);
-                flat_add(buf);
-                break;
-            case 'B':
-                flat_add("");
-                break;
-            default:
-                snprintf(buf, FLAT_LEN, "  %s", line);
-                flat_add(buf);
-        }
+  flat_total = 0;
+  char buf[FLAT_LEN];
+  for (int i = 0; sec[i]; i++) {
+    const char *line = sec[i];
+    char type = line[0];
+    const char *content = line + 2;
+    switch (type) {
+    case 'T':
+      flat_add(
+          C_SEP
+          "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
+      snprintf(buf, FLAT_LEN, C_TITLE BOLD "  %s" RESET, content);
+      flat_add(buf);
+      flat_add(
+          C_SEP
+          "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
+      break;
+    case 'G':
+      flat_add("");
+      snprintf(buf, FLAT_LEN, C_HEAD BOLD "  ## %s" RESET, content);
+      flat_add(buf);
+      break;
+    case 'R': {
+      char key[64], desc[256];
+      const char *pipe = strchr(content, '|');
+      if (pipe) {
+        int klen = (int)(pipe - content);
+        if (klen >= (int)sizeof(key))
+          klen = (int)sizeof(key) - 1;
+        strncpy(key, content, klen);
+        key[klen] = '\0';
+        strncpy(desc, pipe + 1, sizeof(desc) - 1);
+        desc[sizeof(desc) - 1] = '\0';
+      } else {
+        strncpy(key, content, sizeof(key) - 1);
+        key[sizeof(key) - 1] = '\0';
+        desc[0] = '\0';
+      }
+      snprintf(buf, FLAT_LEN, "  " C_KEY BOLD "%-18s" RESET C_DESC "  %s" RESET,
+               key, desc);
+      flat_add(buf);
+      break;
     }
+    case 'N':
+      snprintf(buf, FLAT_LEN, C_HINT DIM "  > %s" RESET, content);
+      flat_add(buf);
+      break;
+    case 'B':
+      flat_add("");
+      break;
+    default:
+      snprintf(buf, FLAT_LEN, "  %s", line);
+      flat_add(buf);
+    }
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -682,72 +844,84 @@ static void flat_build(const char **sec) {
    ══════════════════════════════════════════════════════════════════════ */
 
 static void view_section(const char **sec) {
-    flat_build(sec);
+  flat_build(sec);
 
-    int total   = flat_total;
-    int rows    = term_rows();
-    int visible = rows - 3;
-    int cursor  = 0;
-    int offset  = 0;
-    int last_g  = 0;
+  int total = flat_total;
+  int rows = term_rows();
+  int visible = rows - 3;
+  int cursor = 0;
+  int offset = 0;
+  int last_g = 0;
 
-    printf(CUR_HIDE);
+  printf(CUR_HIDE);
 
-    while (1) {
-        if (cursor < 0)      cursor = 0;
-        if (cursor >= total) cursor = total - 1;
+  while (1) {
+    if (cursor < 0)
+      cursor = 0;
+    if (cursor >= total)
+      cursor = total - 1;
 
-        if (cursor < offset)            offset = cursor;
-        if (cursor >= offset + visible) offset = cursor - visible + 1;
-        if (offset < 0)                 offset = 0;
+    if (cursor < offset)
+      offset = cursor;
+    if (cursor >= offset + visible)
+      offset = cursor - visible + 1;
+    if (offset < 0)
+      offset = 0;
 
-        printf(CLR);
+    printf(CLR);
 
-        for (int i = offset; i < offset + visible && i < total; i++) {
-            if (i == cursor)
-                printf(C_CUR "%s" RESET "\n", flat[i].text);
-            else
-                printf("%s\n", flat[i].text);
-        }
-
-        printf(C_SEP "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-        printf(C_HINT
-            "  j/k↕  gg начало  G конец  %% край↔край  x/h выход"
-            C_SEP "  [%d/%d]\n" RESET,
-            cursor + 1, total);
-
-        int key = read_key();
-
-        if (key == 'j') {
-            if (cursor < total - 1) cursor++;
-            last_g = 0;
-        } else if (key == 'k') {
-            if (cursor > 0) cursor--;
-            last_g = 0;
-        } else if (key == 'g') {
-            if (last_g) { cursor = 0; offset = 0; last_g = 0; }
-            else        { last_g = 1; }
-        } else if (key == 'G') {
-            cursor = total - 1;
-            last_g = 0;
-        } else if (key == '%') {
-            cursor = (cursor < total / 2) ? total - 1 : 0;
-            last_g = 0;
-        } else if (key == 'x' || key == 'h' || key == 'q' || key == 27) {
-            break;
-        } else {
-            last_g = 0;
-        }
+    for (int i = offset; i < offset + visible && i < total; i++) {
+      if (i == cursor)
+        printf(C_CUR "%s" RESET "\n", flat[i].text);
+      else
+        printf("%s\n", flat[i].text);
     }
 
-    printf(CUR_SHOW);
+    printf(C_SEP
+           "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
+    printf(C_HINT "  j/k↕  gg начало  G конец  %% край↔край  x/h выход" C_SEP
+                  "  [%d/%d]\n" RESET,
+           cursor + 1, total);
+
+    int key = read_key();
+
+    if (key == 'j') {
+      if (cursor < total - 1)
+        cursor++;
+      last_g = 0;
+    } else if (key == 'k') {
+      if (cursor > 0)
+        cursor--;
+      last_g = 0;
+    } else if (key == 'g') {
+      if (last_g) {
+        cursor = 0;
+        offset = 0;
+        last_g = 0;
+      } else {
+        last_g = 1;
+      }
+    } else if (key == 'G') {
+      cursor = total - 1;
+      last_g = 0;
+    } else if (key == '%') {
+      cursor = (cursor < total / 2) ? total - 1 : 0;
+      last_g = 0;
+    } else if (key == 'x' || key == 'h' || key == 'q' || key == 27) {
+      break;
+    } else {
+      last_g = 0;
+    }
+  }
+
+  printf(CUR_SHOW);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
    MENU
    ══════════════════════════════════════════════════════════════════════ */
 
-#define MENU_N 10
+#define MENU_N 12
 
 static const char *menu_labels[MENU_N] = {
     "Навигация",
@@ -760,85 +934,93 @@ static const char *menu_labels[MENU_N] = {
     "IDE-функции  (LSP / диагностика / автодополнение / линтинг)",
     "Telescope / Fugitive / Mason / Noice",
     "Управление Git  (Neogit + Diffview)",
+    "UI-плагины  (bufferline / dashboard / winbar / отступы)",
+    "Терминал и дополнение  (toggleterm / codeium / autopairs / emmet)",
 };
 
 static const char **menu_sections[MENU_N] = {
-    sec_navigation,
-    sec_editing,
-    sec_textobj,
-    sec_search,
-    sec_files,
-    sec_dirwork,
-    sec_plugins,
-    sec_ide,
-    sec_telescope,
-    sec_git,
+    sec_navigation, sec_editing, sec_textobj, sec_search,
+    sec_files,      sec_dirwork, sec_plugins, sec_ide,
+    sec_telescope,  sec_git,     sec_ui,      sec_tools,
 };
 
 static void print_menu(int cur) {
-    printf(CLR);
-    printf(C_TITLE BOLD
-        "\n"
-        "  ███╗   ██╗██╗   ██╗██╗███╗   ███╗████████╗██╗   ██╗████████╗ ██████╗ ██████╗ \n"
-        "  ████╗  ██║██║   ██║██║████╗ ████║╚══██╔══╝██║   ██║╚══██╔══╝██╔═══██╗██╔══██╗\n"
-        "  ██╔██╗ ██║██║   ██║██║██╔████╔██║   ██║   ██║   ██║   ██║   ██║   ██║██████╔╝\n"
-        "  ██║╚██╗██║╚██╗ ██╔╝██║██║╚██╔╝██║   ██║   ██║   ██║   ██║   ██║   ██║██╔══██╗\n"
-        "  ██║ ╚████║ ╚████╔╝ ██║██║ ╚═╝ ██║   ██║   ╚██████╔╝   ██║   ╚██████╔╝██║  ██║\n"
-        "  ╚═╝  ╚═══╝  ╚═══╝  ╚═╝╚═╝     ╚═╝   ╚═╝    ╚═════╝    ╚═╝    ╚═════╝ ╚═╝  ╚═╝\n"
-        RESET);
-    printf(C_SEP "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
+  printf(CLR);
+  printf(C_TITLE BOLD "\n"
+                      "  ███╗   ██╗██╗   ██╗██╗███╗   ███╗████████╗██╗   "
+                      "██╗████████╗ ██████╗ ██████╗ \n"
+                      "  ████╗  ██║██║   ██║██║████╗ ████║╚══██╔══╝██║   "
+                      "██║╚══██╔══╝██╔═══██╗██╔══██╗\n"
+                      "  ██╔██╗ ██║██║   ██║██║██╔████╔██║   ██║   ██║   ██║   "
+                      "██║   ██║   ██║██████╔╝\n"
+                      "  ██║╚██╗██║╚██╗ ██╔╝██║██║╚██╔╝██║   ██║   ██║   ██║   "
+                      "██║   ██║   ██║██╔══██╗\n"
+                      "  ██║ ╚████║ ╚████╔╝ ██║██║ ╚═╝ ██║   ██║   ╚██████╔╝   "
+                      "██║   ╚██████╔╝██║  ██║\n"
+                      "  ╚═╝  ╚═══╝  ╚═══╝  ╚═╝╚═╝     ╚═╝   ╚═╝    ╚═════╝    "
+                      "╚═╝    ╚═════╝ ╚═╝  ╚═╝\n" RESET);
+  printf(C_SEP
+         "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
 
-    for (int i = 0; i < MENU_N; i++) {
-        if (i == cur)
-            printf(C_CUR BOLD "  ▶  %s" RESET "\n", menu_labels[i]);
-        else
-            printf(C_KEY "  [%d]" C_DESC "  %s\n" RESET, i + 1, menu_labels[i]);
-    }
+  for (int i = 0; i < MENU_N; i++) {
+    if (i == cur)
+      printf(C_CUR BOLD "  ▶  %s" RESET "\n", menu_labels[i]);
+    else
+      printf(C_KEY "  [%d]" C_DESC "  %s\n" RESET, i + 1, menu_labels[i]);
+  }
 
-    printf(C_SEP "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-    printf(C_HINT "  j/k выбор   l/Enter открыть   %% край↔край   q выход\n" RESET);
+  printf(C_SEP
+         "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
+  printf(C_HINT
+         "  j/k выбор   l/Enter открыть   %% край↔край   q выход\n" RESET);
 }
 
 int main(void) {
-    term_raw();
-    atexit(term_restore);
-    printf(CUR_HIDE);
+  term_raw();
+  atexit(term_restore);
+  printf(CUR_HIDE);
 
-    int cur    = 0;
-    int last_g = 0;
+  int cur = 0;
+  int last_g = 0;
 
-    while (1) {
-        print_menu(cur);
-        int key = read_key();
+  while (1) {
+    print_menu(cur);
+    int key = read_key();
 
-        if (key == 'j') {
-            if (cur < MENU_N - 1) cur++;
-            last_g = 0;
-        } else if (key == 'k') {
-            if (cur > 0) cur--;
-            last_g = 0;
-        } else if (key == 'g') {
-            if (last_g) { cur = 0; last_g = 0; }
-            else        { last_g = 1; }
-        } else if (key == 'G') {
-            cur = MENU_N - 1;
-            last_g = 0;
-        } else if (key == '%') {
-            cur = (cur == 0) ? MENU_N - 1 : 0;
-            last_g = 0;
-        } else if (key == 'l' || key == '\r' || key == '\n') {
-            view_section(menu_sections[cur]);
-            last_g = 0;
-        } else if (key >= '1' && key <= '0' + MENU_N) {
-            cur = key - '1';
-            view_section(menu_sections[cur]);
-            last_g = 0;
-        } else if (key == 'q' || key == 'x') {
-            printf(CUR_SHOW CLR);
-            printf(C_HINT "\n  bye\n\n" RESET);
-            return 0;
-        } else {
-            last_g = 0;
-        }
+    if (key == 'j') {
+      if (cur < MENU_N - 1)
+        cur++;
+      last_g = 0;
+    } else if (key == 'k') {
+      if (cur > 0)
+        cur--;
+      last_g = 0;
+    } else if (key == 'g') {
+      if (last_g) {
+        cur = 0;
+        last_g = 0;
+      } else {
+        last_g = 1;
+      }
+    } else if (key == 'G') {
+      cur = MENU_N - 1;
+      last_g = 0;
+    } else if (key == '%') {
+      cur = (cur == 0) ? MENU_N - 1 : 0;
+      last_g = 0;
+    } else if (key == 'l' || key == '\r' || key == '\n') {
+      view_section(menu_sections[cur]);
+      last_g = 0;
+    } else if (key >= '1' && key <= '0' + MENU_N) {
+      cur = key - '1';
+      view_section(menu_sections[cur]);
+      last_g = 0;
+    } else if (key == 'q' || key == 'x') {
+      printf(CUR_SHOW CLR);
+      printf(C_HINT "\n  bye\n\n" RESET);
+      return 0;
+    } else {
+      last_g = 0;
     }
+  }
 }
