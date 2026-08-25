@@ -172,6 +172,15 @@ static const char *sec_ids[] = {
     "R:but help cli-ids|полная справка по типам и стабильности IDs",
     "C:but diff",
     "C:but commit -b feat/login -m \"Validate login\" ab:3 cd",
+    "B:",
+    "G:Чтение файла из существующего коммита",
+    "R:but show cl|показать ветку cl (cleanup-zsh-aliases) и её коммиты",
+    "R:but diff vqw|показать diff всего коммита vqw",
+    "R:but status -fv|найти ID нужного файла внутри коммита",
+    "N:В коммите vqw строка файла выглядит: vqw:rq M zsh/.zshrc",
+    "C:but diff vqw:rq",
+    "N:Формат committed file: <commit-id>:<file-id>. Ветка нужна для поиска,",
+    "N:но в but diff не передаётся: commit ID vqw уже однозначно задаёт коммит.",
     NULL};
 
 static const char *sec_commits[] = {
