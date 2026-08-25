@@ -1,14 +1,16 @@
 
-CC      = gcc
+CC      = clang
 CFLAGS  = -O2 -Wall -Wextra
 TARGET  = gitutor
 SRC     = gitutor.c
 PREFIX  = /usr/local
 
-all: $(TARGET)
+all: build
+
+build: $(TARGET)
 
 $(TARGET): $(SRC)
-	$(CC) $(CFLAGS) -o ~/.local/bin/$(TARGET) $(SRC)
+	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
 
 install: $(TARGET)
 	install -Dm755 $(TARGET) $(PREFIX)/bin/$(TARGET)
@@ -19,4 +21,4 @@ uninstall:
 clean:
 	rm -f $(TARGET)
 
-.PHONY: all install uninstall clean
+.PHONY: all build install uninstall clean

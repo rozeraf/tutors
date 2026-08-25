@@ -1,7 +1,7 @@
 CC      = clang
-CFLAGS  = -O2 -Wall -Wextra
-TARGET  = nvimtutor
-SRC     = nvimtutor.c
+CFLAGS  = -O2 -Wall -Wextra -Wpedantic
+TARGET  = bututor
+SRC     = bututor.c
 PREFIX  = /usr/local
 
 all: build
