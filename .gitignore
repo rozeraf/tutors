@@ -1,0 +1,10 @@
+bututor/bututor
+gitutor/gitutor
+nvimtutor/nvimtutor
+zshtutor/zshtutor
+.cache/
+compile_commands.json
+*.swp
+*.swo
+*~
+.DS_Store
