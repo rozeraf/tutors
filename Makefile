@@ -1,7 +1,7 @@
-TUTORS := bututor gitutor nvimtutor zshtutor
+TUTORS := gitutor nvimtutor zshtutor
 
 # A tutor name passed alongside an action narrows that action to the tutor.
-# Examples: `make build gitutor`, `make install bututor`.
+# Examples: `make build gitutor`, `make install zshtutor`.
 SELECTED := $(filter $(TUTORS),$(MAKECMDGOALS))
 ACTIVE   := $(if $(SELECTED),$(SELECTED),$(TUTORS))
 ACTION   := $(filter all build install clean,$(MAKECMDGOALS))

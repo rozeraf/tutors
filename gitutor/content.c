@@ -1,141 +1,6 @@
-#define _DEFAULT_SOURCE
-#include <signal.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <termios.h>
-#include <unistd.h>
+#include "../core/tutor.h"
 
-/* ── ANSI ───────────────────────────────────────────────────────────── */
-#define RESET "\033[0m"
-#define BOLD "\033[1m"
-#define DIM "\033[2m"
-#define CUR_HIDE "\033[?25l"
-#define CUR_SHOW "\033[?25h"
-#define CLR "\033[2J\033[H"
-#define ALT_ON "\033[?1049h"
-#define ALT_OFF "\033[?1049l"
-
-#define C_TITLE "\033[38;5;214m"
-#define C_KEY "\033[38;5;183m"
-#define C_DESC "\033[38;5;252m"
-#define C_HEAD "\033[38;5;150m"
-#define C_SEP "\033[38;5;240m"
-#define C_HINT "\033[38;5;109m"
-#define C_CUR "\033[48;5;237m\033[38;5;255m"
-#define C_CODE "\033[38;5;222m"
-
-/* ── frame buffer ───────────────────────────────────────────────────── */
-static char *fbuf = NULL;
-static size_t fbuf_cap = 0;
-static size_t fbuf_len = 0;
-
-static void xwrite(const void *buf, size_t n) {
-  ssize_t r = write(STDOUT_FILENO, buf, n);
-  (void)r;
-}
-
-static void fb_reset(void) { fbuf_len = 0; }
-
-static void fb_append(const char *s) {
-  size_t n = strlen(s);
-  if (fbuf_len + n + 1 > fbuf_cap) {
-    size_t nc = fbuf_cap ? fbuf_cap * 2 : 8192;
-    while (nc < fbuf_len + n + 1)
-      nc *= 2;
-    char *tmp = realloc(fbuf, nc);
-    if (!tmp)
-      return;
-    fbuf = tmp;
-    fbuf_cap = nc;
-  }
-  memcpy(fbuf + fbuf_len, s, n);
-  fbuf_len += n;
-  fbuf[fbuf_len] = '\0';
-}
-
-static void fb_appendf(const char *fmt, ...) {
-  char tmp[1024];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(tmp, sizeof(tmp), fmt, ap);
-  va_end(ap);
-  fb_append(tmp);
-}
-
-static void fb_flush(void) {
-  if (fbuf_len > 0)
-    xwrite(fbuf, fbuf_len);
-  fb_reset();
-}
-
-/* ── raw terminal ───────────────────────────────────────────────────── */
-static struct termios orig_term;
-
-static void term_raw(void) {
-  struct termios t;
-  tcgetattr(STDIN_FILENO, &orig_term);
-  t = orig_term;
-  t.c_lflag &= ~(ICANON | ECHO);
-  t.c_cc[VMIN] = 1;
-  t.c_cc[VTIME] = 0;
-  tcsetattr(STDIN_FILENO, TCSANOW, &t);
-}
-
-static void term_restore(void) {
-  tcsetattr(STDIN_FILENO, TCSANOW, &orig_term);
-  xwrite(CUR_SHOW, sizeof(CUR_SHOW) - 1);
-  xwrite(ALT_OFF, sizeof(ALT_OFF) - 1);
-}
-
-static int read_key(void) {
-  unsigned char c;
-  if (read(STDIN_FILENO, &c, 1) != 1)
-    return -1;
-  if (c == 27) {
-    unsigned char seq[3];
-    fd_set fds;
-    struct timeval tv = {0, 50000};
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    if (select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv) <= 0)
-      return 27;
-    if (read(STDIN_FILENO, &seq[0], 1) != 1)
-      return 27;
-    if (read(STDIN_FILENO, &seq[1], 1) != 1)
-      return 27;
-    if (seq[0] == '[') {
-      if (seq[1] == 'A')
-        return 'k';
-      if (seq[1] == 'B')
-        return 'j';
-    }
-    return 0;
-  }
-  return (int)c;
-}
-
-static int term_rows(void) {
-  struct winsize w;
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 4)
-    return (int)w.ws_row;
-  return 24;
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   CONTENT
-   "T:текст"    — title
-   "G:текст"    — group header
-   "R:key|desc" — row (команда | описание)
-   "C:код"      — code line (выделяется как код)
-   "N:текст"    — note
-   "B:"         — blank
-   ══════════════════════════════════════════════════════════════════════ */
-
-static const char *sec_basics[] = {
+static const char *const sec_basics[] = {
     "T:ОСНОВЫ GIT",
     "G:Инициализация и клонирование",
     "R:git init|инициализировать репозиторий в текущей папке",
@@ -179,8 +44,7 @@ static const char *sec_basics[] = {
     "R:ci: ...|изменения CI/CD пайплайна",
     "N:Формат: тип(scope): описание  →  feat(auth): add JWT refresh",
     NULL};
-
-static const char *sec_log[] = {
+static const char *const sec_log[] = {
     "T:ИСТОРИЯ И ПРОСМОТР",
     "G:git log",
     "R:git log|полная история",
@@ -217,8 +81,7 @@ static const char *sec_log[] = {
     "R:git blame -L 10,20 <file>|blame для строк 10–20",
     "R:git blame -w <file>|игнорировать изменения пробелов",
     NULL};
-
-static const char *sec_branches[] = {
+static const char *const sec_branches[] = {
     "T:ВЕТКИ",
     "G:Создание и переключение",
     "R:git branch|список локальных веток",
@@ -259,8 +122,7 @@ static const char *sec_branches[] = {
     "R:git cherry-pick --no-commit <c>|применить без создания коммита",
     "R:git cherry-pick --abort|отменить cherry-pick",
     NULL};
-
-static const char *sec_remote[] = {
+static const char *const sec_remote[] = {
     "T:РАБОТА С REMOTE",
     "G:Remote-репозитории",
     "R:git remote|список remote",
@@ -292,8 +154,7 @@ static const char *sec_remote[] = {
     "R:git branch -vv|показать upstream каждой ветки",
     "R:git push -u origin HEAD|push + upstream для ветки с тем же именем",
     NULL};
-
-static const char *sec_stash[] = {
+static const char *const sec_stash[] = {
     "T:STASH, RESET, RESTORE",
     "G:git stash — временное хранилище",
     "R:git stash|сохранить рабочие изменения в стек",
@@ -327,8 +188,7 @@ static const char *sec_stash[] = {
     "N:revert безопасен для общих веток — не переписывает историю",
     "N:reset --hard опасен на общих ветках — переписывает историю",
     NULL};
-
-static const char *sec_tags[] = {
+static const char *const sec_tags[] = {
     "T:ТЕГИ И РЕЛИЗЫ",
     "G:Работа с тегами",
     "R:git tag|список тегов",
@@ -349,8 +209,7 @@ static const char *sec_tags[] = {
     "R:git describe|описать коммит на основе тегов",
     "R:git describe --tags|включая lightweight теги",
     NULL};
-
-static const char *sec_config[] = {
+static const char *const sec_config[] = {
     "T:КОНФИГУРАЦИЯ",
     "G:Базовая настройка",
     "R:git config --global user.name 'Name'|установить имя",
@@ -381,8 +240,7 @@ static const char *sec_config[] = {
     "R:git config --global merge.conflictstyle diff3|стиль конфликтов",
     "N:diff3 показывает три версии при конфликте — проще разрешать",
     NULL};
-
-static const char *sec_conflicts[] = {
+static const char *const sec_conflicts[] = {
     "T:КОНФЛИКТЫ",
     "G:Процесс разрешения конфликтов",
     "N:Конфликт возникает при merge/rebase/cherry-pick когда обе ветки",
@@ -414,8 +272,7 @@ static const char *sec_conflicts[] = {
     "N:Маленькие частые коммиты = меньше конфликтов",
     "N:Регулярный pull/fetch = конфликты проще разрешать",
     NULL};
-
-static const char *sec_workflow[] = {
+static const char *const sec_workflow[] = {
     "T:WORKFLOW: DEV + MAIN",
     "G:Базовый рабочий цикл (feature development)",
     "N:Разработка ведётся в dev. В main идут только готовые релизы.",
@@ -464,8 +321,7 @@ static const char *sec_workflow[] = {
     "R:gps|git push",
     "R:gpl|git pull",
     NULL};
-
-static const char *sec_advanced[] = {
+static const char *const sec_advanced[] = {
     "T:ПРОДВИНУТЫЕ ТЕХНИКИ",
     "G:Reflog — история HEAD",
     "R:git reflog|список всех перемещений HEAD",
@@ -506,307 +362,24 @@ static const char *sec_advanced[] = {
     "R:git log --show-signature|показать подписи в логе",
     NULL};
 
-/* ══════════════════════════════════════════════════════════════════════
-   FLAT LINE BUFFER
-   ══════════════════════════════════════════════════════════════════════ */
-
-#define FLAT_MAX 1200
-#define FLAT_LEN 320
-
-typedef struct {
-  char text[FLAT_LEN];
-} FlatLine;
-
-static FlatLine flat[FLAT_MAX];
-static int flat_total = 0;
-
-static void flat_add(const char *s) {
-  if (flat_total >= FLAT_MAX)
-    return;
-  snprintf(flat[flat_total].text, FLAT_LEN, "%s", s);
-  flat_total++;
-}
-
-static void flat_build(const char **sec) {
-  flat_total = 0;
-  char buf[FLAT_LEN];
-  for (int i = 0; sec[i]; i++) {
-    const char *line = sec[i];
-    char type = line[0];
-    const char *content = line + 2;
-    switch (type) {
-    case 'T':
-      flat_add(C_SEP
-               "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
-      snprintf(buf, FLAT_LEN, C_TITLE BOLD "  %s" RESET, content);
-      flat_add(buf);
-      flat_add(C_SEP
-               "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
-      break;
-    case 'G':
-      flat_add("");
-      snprintf(buf, FLAT_LEN, C_HEAD BOLD "  ## %s" RESET, content);
-      flat_add(buf);
-      break;
-    case 'R': {
-      char key[80], desc[256];
-      const char *pipe = strchr(content, '|');
-      if (pipe) {
-        int klen = (int)(pipe - content);
-        if (klen >= (int)sizeof(key))
-          klen = (int)sizeof(key) - 1;
-        strncpy(key, content, klen);
-        key[klen] = '\0';
-        strncpy(desc, pipe + 1, sizeof(desc) - 1);
-        desc[sizeof(desc) - 1] = '\0';
-      } else {
-        strncpy(key, content, sizeof(key) - 1);
-        key[sizeof(key) - 1] = '\0';
-        desc[0] = '\0';
-      }
-      snprintf(buf, FLAT_LEN,
-               "  " C_KEY BOLD "%-34s" RESET C_DESC "  %s" RESET, key, desc);
-      flat_add(buf);
-      break;
-    }
-    case 'C':
-      snprintf(buf, FLAT_LEN, C_CODE "  $ %s" RESET, content);
-      flat_add(buf);
-      break;
-    case 'N':
-      snprintf(buf, FLAT_LEN, C_HINT DIM "  > %s" RESET, content);
-      flat_add(buf);
-      break;
-    case 'B':
-      flat_add("");
-      break;
-    default:
-      snprintf(buf, FLAT_LEN, "  %s", line);
-      flat_add(buf);
-    }
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   SECTION VIEWER
-   ══════════════════════════════════════════════════════════════════════ */
-
-static void view_section(const char **sec) {
-  flat_build(sec);
-
-  int total = flat_total;
-  int rows = term_rows();
-  int visible = rows - 3;
-  int cursor = 0;
-  int offset = 0;
-  int last_g = 0;
-
-  fb_reset();
-  fb_append(ALT_ON);
-  fb_append(CUR_HIDE);
-  fb_flush();
-
-  while (1) {
-    if (cursor < 0)
-      cursor = 0;
-    if (cursor >= total)
-      cursor = total - 1;
-
-    if (cursor < offset)
-      offset = cursor;
-    if (cursor >= offset + visible)
-      offset = cursor - visible + 1;
-    if (offset < 0)
-      offset = 0;
-
-    fb_reset();
-    fb_append(CLR);
-
-    for (int i = offset; i < offset + visible && i < total; i++) {
-      if (i == cursor)
-        fb_appendf(C_CUR "%s" RESET "\n", flat[i].text);
-      else
-        fb_appendf("%s\n", flat[i].text);
-    }
-
-    fb_append(C_SEP
-              "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-    fb_appendf(C_HINT "  j/k↕  gg начало  G конец  %% край↔край  q выход" C_SEP
-                      "  [%d/%d]\n" RESET,
-               cursor + 1, total);
-    fb_flush();
-
-    int key = read_key();
-
-    if (key == 'j') {
-      if (cursor < total - 1)
-        cursor++;
-      last_g = 0;
-    } else if (key == 'k') {
-      if (cursor > 0)
-        cursor--;
-      last_g = 0;
-    } else if (key == 'd') {
-      cursor += visible / 2;
-      last_g = 0;
-    } else if (key == 'u') {
-      cursor -= visible / 2;
-      last_g = 0;
-    } else if (key == 'g') {
-      if (last_g) {
-        cursor = 0;
-        offset = 0;
-        last_g = 0;
-      } else {
-        last_g = 1;
-      }
-    } else if (key == 'G') {
-      cursor = total - 1;
-      last_g = 0;
-    } else if (key == '%') {
-      cursor = (cursor < total / 2) ? total - 1 : 0;
-      last_g = 0;
-    } else if (key == 'x' || key == 'h' || key == 'q' || key == 27) {
-      break;
-    } else {
-      last_g = 0;
-    }
-  }
-
-  fb_reset();
-  fb_append(ALT_OFF);
-  fb_append(CUR_SHOW);
-  fb_flush();
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   MENU
-   ══════════════════════════════════════════════════════════════════════ */
-
-#define MENU_N 8
-
-static const char *menu_labels[MENU_N] = {
-    "Основы  (init / add / commit / diff / restore)",
-    "История  (log / show / grep / bisect / blame)",
-    "Ветки  (branch / switch / merge / rebase / cherry-pick)",
-    "Remote  (fetch / pull / push / upstream)",
-    "Stash, Reset, Restore, Revert",
-    "Теги и релизы  (semver)",
-    "Конфигурация  (.gitconfig / .gitignore / алиасы)",
-    "Конфликты  (разрешение / стратегии)",
+static const TutorSection sections[] = {
+    {"Основы  (init / add / commit / diff / restore)", sec_basics},
+    {"История  (log / show / grep / bisect / blame)", sec_log},
+    {"Ветки  (branch / switch / merge / rebase / cherry-pick)", sec_branches},
+    {"Remote  (fetch / pull / push / upstream)", sec_remote},
+    {"Stash, Reset, Restore, Revert", sec_stash},
+    {"Теги и релизы  (semver)", sec_tags},
+    {"Конфигурация  (.gitconfig / .gitignore / алиасы)", sec_config},
+    {"Конфликты  (разрешение / стратегии)", sec_conflicts},
+    {"Workflow: dev + main  (деплой / хотфиксы)", sec_workflow},
+    {"Продвинутые техники  (reflog / worktree / sparse)", sec_advanced},
 };
 
-static const char **menu_sections[MENU_N] = {
-    sec_basics,   sec_log,     sec_branches, sec_remote,
-    sec_stash,    sec_tags,    sec_config,   sec_conflicts,
+const TutorConfig tutor_config = {
+    .title = "GITUTOR",
+    .tagline = "git · branches · remote · stash · rebase · workflow · reflog",
+    .title_color = "\033[38;5;214m",
+    .key_width = 34,
+    .sections = sections,
+    .section_count = sizeof(sections) / sizeof(sections[0]),
 };
-
-/* workflow и advanced доступны как отдельные пункты */
-#define MENU_TOTAL (MENU_N + 2)
-
-static const char *menu_labels_ext[MENU_TOTAL];
-static const char **menu_sections_ext[MENU_TOTAL];
-
-static void menu_init(void) {
-  for (int i = 0; i < MENU_N; i++) {
-    menu_labels_ext[i] = menu_labels[i];
-    menu_sections_ext[i] = menu_sections[i];
-  }
-  menu_labels_ext[MENU_N]     = "Workflow: dev + main  (деплой / хотфиксы)";
-  menu_sections_ext[MENU_N]   = sec_workflow;
-  menu_labels_ext[MENU_N + 1] = "Продвинутые техники  (reflog / worktree / sparse)";
-  menu_sections_ext[MENU_N + 1] = sec_advanced;
-}
-
-static void print_menu(int cur) {
-  fb_reset();
-  fb_append(CLR);
-  fb_append(
-      C_TITLE BOLD "\n"
-      "   ██████╗ ██╗████████╗████████╗██╗   ██╗████████╗ ██████╗ ██████╗ \n"
-      "  ██╔════╝ ██║╚══██╔══╝╚══██╔══╝██║   ██║╚══██╔══╝██╔═══██╗██╔══██╗\n"
-      "  ██║  ███╗██║   ██║      ██║   ██║   ██║   ██║   ██║   ██║██████╔╝\n"
-      "  ██║   ██║██║   ██║      ██║   ██║   ██║   ██║   ██║   ██║██╔══██╗\n"
-      "  ╚██████╔╝██║   ██║      ██║   ╚██████╔╝   ██║   ╚██████╔╝██║  ██║\n"
-      "   ╚═════╝ ╚═╝   ╚═╝      ╚═╝    ╚═════╝    ╚═╝    ╚═════╝ ╚═╝  ╚═╝\n" RESET);
-  fb_append(C_HINT DIM
-            "  git · branches · remote · stash · rebase · workflow · reflog\n" RESET);
-  fb_append(C_SEP
-            "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-
-  char buf[256];
-  for (int i = 0; i < MENU_TOTAL; i++) {
-    if (i == cur)
-      snprintf(buf, sizeof(buf),
-               C_CUR BOLD "  ▶  %s" RESET "\n", menu_labels_ext[i]);
-    else
-      snprintf(buf, sizeof(buf),
-               C_KEY "  [%d]" C_DESC "  %s\n" RESET, i + 1, menu_labels_ext[i]);
-    fb_append(buf);
-  }
-
-  fb_append(C_SEP
-            "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-  fb_append(C_HINT
-            "  j/k выбор   l/Enter открыть   %% край↔край   q выход\n" RESET);
-  fb_flush();
-}
-
-int main(void) {
-  menu_init();
-  term_raw();
-  atexit(term_restore);
-
-  fb_reset();
-  fb_append(ALT_ON);
-  fb_append(CUR_HIDE);
-  fb_flush();
-
-  int cur = 0;
-  int last_g = 0;
-
-  while (1) {
-    print_menu(cur);
-    int key = read_key();
-
-    if (key == 'j') {
-      if (cur < MENU_TOTAL - 1)
-        cur++;
-      last_g = 0;
-    } else if (key == 'k') {
-      if (cur > 0)
-        cur--;
-      last_g = 0;
-    } else if (key == 'g') {
-      if (last_g) {
-        cur = 0;
-        last_g = 0;
-      } else {
-        last_g = 1;
-      }
-    } else if (key == 'G') {
-      cur = MENU_TOTAL - 1;
-      last_g = 0;
-    } else if (key == '%') {
-      cur = (cur == 0) ? MENU_TOTAL - 1 : 0;
-      last_g = 0;
-    } else if (key == 'l' || key == '\r' || key == '\n') {
-      view_section(menu_sections_ext[cur]);
-      last_g = 0;
-    } else if (key >= '1' && key <= '0' + MENU_TOTAL) {
-      cur = key - '1';
-      view_section(menu_sections_ext[cur]);
-      last_g = 0;
-    } else if (key == 'q' || key == 'x') {
-      fb_reset();
-      fb_append(ALT_OFF);
-      fb_append(CUR_SHOW);
-      fb_append(CLR);
-      fb_append(C_HINT "\n  bye\n\n" RESET);
-      fb_flush();
-      return 0;
-    } else {
-      last_g = 0;
-    }
-  }
-}

@@ -1,76 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/ioctl.h>
-#include <termios.h>
-#include <unistd.h>
+#include "../core/tutor.h"
 
-/* ── ANSI ───────────────────────────────────────────────────────────── */
-#define RESET "\033[0m"
-#define BOLD "\033[1m"
-#define DIM "\033[2m"
-#define CUR_HIDE "\033[?25l"
-#define CUR_SHOW "\033[?25h"
-#define CLR "\033[2J\033[H"
-
-#define C_TITLE "\033[38;5;111m"
-#define C_KEY "\033[38;5;183m"
-#define C_DESC "\033[38;5;252m"
-#define C_HEAD "\033[38;5;150m"
-#define C_SEP "\033[38;5;240m"
-#define C_HINT "\033[38;5;109m"
-#define C_CUR "\033[48;5;237m\033[38;5;255m"
-
-/* ── raw terminal ───────────────────────────────────────────────────── */
-static struct termios orig_term;
-
-static void term_raw(void) {
-  struct termios t;
-  tcgetattr(STDIN_FILENO, &orig_term);
-  t = orig_term;
-  t.c_lflag &= ~(ICANON | ECHO);
-  t.c_cc[VMIN] = 1;
-  t.c_cc[VTIME] = 0;
-  tcsetattr(STDIN_FILENO, TCSANOW, &t);
-}
-
-static void term_restore(void) {
-  tcsetattr(STDIN_FILENO, TCSANOW, &orig_term);
-  printf(CUR_SHOW);
-}
-
-static int read_key(void) {
-  unsigned char c;
-  if (read(STDIN_FILENO, &c, 1) != 1)
-    return -1;
-  if (c == 27) {
-    unsigned char seq[2];
-    if (read(STDIN_FILENO, &seq[0], 1) != 1)
-      return 27;
-    if (read(STDIN_FILENO, &seq[1], 1) != 1)
-      return 27;
-    return 0;
-  }
-  return (int)c;
-}
-
-static int term_rows(void) {
-  struct winsize w;
-  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 4)
-    return (int)w.ws_row;
-  return 24;
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   CONTENT
-   "T:текст"    — title
-   "G:текст"    — group header
-   "R:key|desc" — row
-   "N:текст"    — note
-   "B:"         — blank
-   ══════════════════════════════════════════════════════════════════════ */
-
-static const char *sec_cmdline[] = {
+static const char *const sec_cmdline[] = {
     "T:НАВИГАЦИЯ В КОМАНДНОЙ СТРОКЕ",
     "G:Движение по строке (emacs-биндинги, работают в INSERT vi-mode)",
     "R:Ctrl+a|начало строки",
@@ -99,8 +29,7 @@ static const char *sec_cmdline[] = {
     "N:Активен vi-mode (bindkey -v) — см. секцию «Vi-mode в zsh»",
     "N:Ctrl+A/E/W/R явно переопределены в vi-mode INSERT для удобства",
     NULL};
-
-static const char *sec_history[] = {
+static const char *const sec_history[] = {
     "T:ИСТОРИЯ КОМАНД",
     "G:Интерактивный поиск",
     "R:Ctrl+r|поиск по истории (fzf), работает в INSERT и NORMAL",
@@ -133,8 +62,7 @@ static const char *sec_history[] = {
     "N:HISTSIZE и SAVEHIST = 10000, HISTFILE = ~/.zsh_history",
     "N:Чтобы команда не попала в историю — поставь пробел перед ней",
     NULL};
-
-static const char *sec_aliases[] = {
+static const char *const sec_aliases[] = {
     "T:АЛИАСЫ",
     "G:Файлы и навигация",
     "R:ls|lsd (замена ls)",
@@ -159,8 +87,7 @@ static const char *sec_aliases[] = {
     "R:i <pkg>|sudo pacman -S --needed",
     "R:torrent|qbittorrent",
     NULL};
-
-static const char *sec_functions[] = {
+static const char *const sec_functions[] = {
     "T:ФУНКЦИИ",
     "G:Файлы и система",
     "R:backup|бэкап текущей папки в ~/raf/backups/",
@@ -183,8 +110,7 @@ static const char *sec_functions[] = {
     "R:qs --restart|перезапустить quickshell (pkill + nohup)",
     "R:qs <args>|обёртка для command qs",
     NULL};
-
-static const char *sec_plugins[] = {
+static const char *const sec_plugins[] = {
     "T:ПЛАГИНЫ ZSH (zinit)",
     "G:Менеджер плагинов",
     "N:Используется zinit (вместо oh-my-zsh). Исходник: /usr/share/zinit/zinit.zsh",
@@ -212,8 +138,7 @@ static const char *sec_plugins[] = {
     "R:sudo (Esc Esc)|добавить sudo к текущей или последней команде",
     "N:git — алиасы gco, gcb, gd и т.д. (OMZ git plugin)",
     NULL};
-
-static const char *sec_fzf[] = {
+static const char *const sec_fzf[] = {
     "T:FZF",
     "G:Горячие клавиши (fzf key-bindings.zsh)",
     "R:Ctrl+r|поиск по истории команд (INSERT и NORMAL mode)",
@@ -247,8 +172,7 @@ static const char *sec_fzf[] = {
     "N:cd <Tab> показывает содержимое папки через lsd",
     "N:fnvim — fzf с bat-превью для быстрого открытия файлов в nvim",
     NULL};
-
-static const char *sec_tools[] = {
+static const char *const sec_tools[] = {
     "T:ИНСТРУМЕНТЫ (zoxide / starship / direnv)",
     "G:zoxide — умный cd",
     "R:z <query>|перейти в наиболее частую папку по совпадению",
@@ -281,8 +205,7 @@ static const char *sec_tools[] = {
     "G:fd — замена find",
     "R:fd <name>|быстрый поиск файлов по имени",
     NULL};
-
-static const char *sec_globbing[] = {
+static const char *const sec_globbing[] = {
     "T:ZSH GLOBBING И ПОДСТАНОВКИ",
     "G:Стандартные wildcards",
     "R:*|любое количество любых символов",
@@ -336,8 +259,7 @@ static const char *sec_globbing[] = {
     "R:cmd1 || cmd2|cmd2 только если cmd1 упал",
     "R:cmd1 ; cmd2|выполнить последовательно",
     NULL};
-
-static const char *sec_jobcontrol[] = {
+static const char *const sec_jobcontrol[] = {
     "T:JOB CONTROL И ПРОЦЕССЫ",
     "G:Управление задачами",
     "R:cmd &|запустить в фоне",
@@ -372,8 +294,7 @@ static const char *sec_jobcontrol[] = {
     "N:Ctrl+c отправляет SIGINT — корректное завершение",
     "N:Ctrl+z отправляет SIGTSTP — пауза, можно продолжить через fg/bg",
     NULL};
-
-static const char *sec_vimode[] = {
+static const char *const sec_vimode[] = {
     "T:VI-MODE В ZSH",
     "G:Режимы и индикаторы",
     "N:Активируется через bindkey -v. KEYTIMEOUT=1 — быстрый выход по ESC",
@@ -462,266 +383,24 @@ static const char *sec_vimode[] = {
     "N:Для сложного редактирования строки — fc: откроет nvim с командой",
     NULL};
 
-/* ══════════════════════════════════════════════════════════════════════
-   FLAT LINE BUFFER
-   ══════════════════════════════════════════════════════════════════════ */
-
-#define FLAT_MAX 1000
-#define FLAT_LEN 320
-
-typedef struct {
-  char text[FLAT_LEN];
-} FlatLine;
-
-static FlatLine flat[FLAT_MAX];
-static int flat_total = 0;
-
-static void flat_add(const char *s) {
-  if (flat_total >= FLAT_MAX)
-    return;
-  snprintf(flat[flat_total].text, FLAT_LEN, "%s", s);
-  flat_total++;
-}
-
-static void flat_build(const char **sec) {
-  flat_total = 0;
-  char buf[FLAT_LEN];
-  for (int i = 0; sec[i]; i++) {
-    const char *line = sec[i];
-    char type = line[0];
-    const char *content = line + 2;
-    switch (type) {
-    case 'T':
-      flat_add(
-          C_SEP
-          "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
-      snprintf(buf, FLAT_LEN, C_TITLE BOLD "  %s" RESET, content);
-      flat_add(buf);
-      flat_add(
-          C_SEP
-          "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" RESET);
-      break;
-    case 'G':
-      flat_add("");
-      snprintf(buf, FLAT_LEN, C_HEAD BOLD "  ## %s" RESET, content);
-      flat_add(buf);
-      break;
-    case 'R': {
-      char key[64], desc[256];
-      const char *pipe = strchr(content, '|');
-      if (pipe) {
-        int klen = (int)(pipe - content);
-        if (klen >= (int)sizeof(key))
-          klen = (int)sizeof(key) - 1;
-        strncpy(key, content, klen);
-        key[klen] = '\0';
-        strncpy(desc, pipe + 1, sizeof(desc) - 1);
-        desc[sizeof(desc) - 1] = '\0';
-      } else {
-        strncpy(key, content, sizeof(key) - 1);
-        key[sizeof(key) - 1] = '\0';
-        desc[0] = '\0';
-      }
-      snprintf(buf, FLAT_LEN, "  " C_KEY BOLD "%-22s" RESET C_DESC "  %s" RESET,
-               key, desc);
-      flat_add(buf);
-      break;
-    }
-    case 'N':
-      snprintf(buf, FLAT_LEN, C_HINT DIM "  > %s" RESET, content);
-      flat_add(buf);
-      break;
-    case 'B':
-      flat_add("");
-      break;
-    default:
-      snprintf(buf, FLAT_LEN, "  %s", line);
-      flat_add(buf);
-    }
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   SECTION VIEWER
-   ══════════════════════════════════════════════════════════════════════ */
-
-static void view_section(const char **sec) {
-  flat_build(sec);
-
-  int total = flat_total;
-  int rows = term_rows();
-  int visible = rows - 3;
-  int cursor = 0;
-  int offset = 0;
-  int last_g = 0;
-
-  printf(CUR_HIDE);
-
-  while (1) {
-    if (cursor < 0)
-      cursor = 0;
-    if (cursor >= total)
-      cursor = total - 1;
-
-    if (cursor < offset)
-      offset = cursor;
-    if (cursor >= offset + visible)
-      offset = cursor - visible + 1;
-    if (offset < 0)
-      offset = 0;
-
-    printf(CLR);
-
-    for (int i = offset; i < offset + visible && i < total; i++) {
-      if (i == cursor)
-        printf(C_CUR "%s" RESET "\n", flat[i].text);
-      else
-        printf("%s\n", flat[i].text);
-    }
-
-    printf(C_SEP
-           "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-    printf(C_HINT "  j/k↕  gg начало  G конец  %% край↔край  x/h выход" C_SEP
-                  "  [%d/%d]\n" RESET,
-           cursor + 1, total);
-
-    int key = read_key();
-
-    if (key == 'j') {
-      if (cursor < total - 1)
-        cursor++;
-      last_g = 0;
-    } else if (key == 'k') {
-      if (cursor > 0)
-        cursor--;
-      last_g = 0;
-    } else if (key == 'g') {
-      if (last_g) {
-        cursor = 0;
-        offset = 0;
-        last_g = 0;
-      } else {
-        last_g = 1;
-      }
-    } else if (key == 'G') {
-      cursor = total - 1;
-      last_g = 0;
-    } else if (key == '%') {
-      cursor = (cursor < total / 2) ? total - 1 : 0;
-      last_g = 0;
-    } else if (key == 'x' || key == 'h' || key == 'q' || key == 27) {
-      break;
-    } else {
-      last_g = 0;
-    }
-  }
-
-  printf(CUR_SHOW);
-}
-
-/* ══════════════════════════════════════════════════════════════════════
-   MENU
-   ══════════════════════════════════════════════════════════════════════ */
-
-#define MENU_N 10
-
-static const char *menu_labels[MENU_N] = {
-    "Навигация в командной строке",
-    "История команд",
-    "Алиасы",
-    "Функции  (backup / ccmd / network / qs / weather...)",
-    "Плагины zinit  (autosuggestions / fzf-tab / sudo / dirhistory...)",
-    "fzf  (Ctrl+r / Ctrl+t / Alt+c / completion)",
-    "Инструменты  (zoxide / bat / eza / rg / fd / direnv / uv / starship)",
-    "Globbing и подстановки",
-    "Job control и процессы",
-    "Vi-mode в zsh  (режимы / text objects / surround / курсор / RPROMPT)",
+static const TutorSection sections[] = {
+    {"Навигация в командной строке", sec_cmdline},
+    {"История команд", sec_history},
+    {"Алиасы", sec_aliases},
+    {"Функции  (backup / ccmd / network / qs / weather...)", sec_functions},
+    {"Плагины zinit  (autosuggestions / fzf-tab / sudo / dirhistory...)", sec_plugins},
+    {"fzf  (Ctrl+r / Ctrl+t / Alt+c / completion)", sec_fzf},
+    {"Инструменты  (zoxide / bat / eza / rg / fd / direnv / uv / starship)", sec_tools},
+    {"Globbing и подстановки", sec_globbing},
+    {"Job control и процессы", sec_jobcontrol},
+    {"Vi-mode в zsh  (режимы / text objects / surround / курсор / RPROMPT)", sec_vimode},
 };
 
-static const char **menu_sections[MENU_N] = {
-    sec_cmdline, sec_history, sec_aliases,  sec_functions,  sec_plugins,
-    sec_fzf,     sec_tools,   sec_globbing, sec_jobcontrol, sec_vimode,
+const TutorConfig tutor_config = {
+    .title = "ZSHTUTOR",
+    .tagline = "zsh · zinit · vi-mode · fzf · zoxide · starship · eza · bat · rg · fd",
+    .title_color = "\033[38;5;111m",
+    .key_width = 22,
+    .sections = sections,
+    .section_count = sizeof(sections) / sizeof(sections[0]),
 };
-
-static void print_menu(int cur) {
-  printf(CLR);
-  printf(C_TITLE BOLD "\n"
-                      "  ███████╗  ██████╗ ██╗  ██╗ ████████╗ ██╗   ██╗ "
-                      "████████╗  ██████╗  ██████╗ \n"
-                      "     ███╔╝ ██╔════╝ ██║  ██║ ╚══██╔══╝ ██║   ██║ "
-                      "╚══██╔══╝ ██╔═══██╗ ██╔══██╗\n"
-                      "    ███╔╝  ╚█████╗  ███████║    ██║    ██║   ██║    ██║ "
-                      "   ██║   ██║ ██████╔╝\n"
-                      "   ███╔╝    ╚═══██╗ ██╔══██║    ██║    ██║   ██║    ██║ "
-                      "   ██║   ██║ ██╔══██╗\n"
-                      "  ███████╗ ██████╔╝ ██║  ██║    ██║    ╚██████╔╝    ██║ "
-                      "   ╚██████╔╝ ██║  ██║\n"
-                      "  ╚══════╝ ╚═════╝  ╚═╝  ╚═╝    ╚═╝     ╚═════╝     ╚═╝ "
-                      "    ╚═════╝  ╚═╝  ╚═╝\n" RESET);
-  printf(C_HINT DIM "  zsh · zinit · vi-mode · fzf · zoxide · starship · eza · "
-                    "bat · rg · fd\n" RESET);
-  printf(C_SEP
-         "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-
-  for (int i = 0; i < MENU_N; i++) {
-    if (i == cur)
-      printf(C_CUR BOLD "  ▶  %s" RESET "\n", menu_labels[i]);
-    else
-      printf(C_KEY "  [%d]" C_DESC "  %s\n" RESET, i + 1, menu_labels[i]);
-  }
-
-  printf(C_SEP
-         "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" RESET);
-  printf(C_HINT
-         "  j/k выбор   l/Enter открыть   %% край↔край   q выход\n" RESET);
-}
-
-int main(void) {
-  term_raw();
-  atexit(term_restore);
-  printf(CUR_HIDE);
-
-  int cur = 0;
-  int last_g = 0;
-
-  while (1) {
-    print_menu(cur);
-    int key = read_key();
-
-    if (key == 'j') {
-      if (cur < MENU_N - 1)
-        cur++;
-      last_g = 0;
-    } else if (key == 'k') {
-      if (cur > 0)
-        cur--;
-      last_g = 0;
-    } else if (key == 'g') {
-      if (last_g) {
-        cur = 0;
-        last_g = 0;
-      } else {
-        last_g = 1;
-      }
-    } else if (key == 'G') {
-      cur = MENU_N - 1;
-      last_g = 0;
-    } else if (key == '%') {
-      cur = (cur == 0) ? MENU_N - 1 : 0;
-      last_g = 0;
-    } else if (key == 'l' || key == '\r' || key == '\n') {
-      view_section(menu_sections[cur]);
-      last_g = 0;
-    } else if (key >= '1' && key <= '0' + MENU_N) {
-      cur = key - '1';
-      view_section(menu_sections[cur]);
-      last_g = 0;
-    } else if (key == 'q' || key == 'x') {
-      printf(CUR_SHOW CLR);
-      printf(C_HINT "\n  bye\n\n" RESET);
-      return 0;
-    } else {
-      last_g = 0;
-    }
-  }
-}
